@@ -1518,6 +1518,10 @@ function cargarDatos() {
             cuenta.game.promociones = [];
         }
 
+        if (!Array.isArray(cuenta.game.tiemposManuales)) {
+            cuenta.game.tiemposManuales = [];
+        }
+
         if (typeof cuenta.nota === "undefined") {
             cuenta.nota = "";
         }
@@ -5059,7 +5063,11 @@ function mostrarEstaciones() {
 
             (
                 cuentaEstacion
-                    ? "<button onclick='mostrarCuentaJugador(" +
+                    ? "<button onclick='agregarTiempoManual(" +
+                      estacion.id +
+                      ")'>🛠️ Tiempo manual</button>" +
+
+                      "<button onclick='mostrarCuentaJugador(" +
                       cuentaEstacion.id +
                       ")'>🧾 Cuenta $" +
                       obtenerTotalCuenta(cuentaEstacion) +
@@ -9217,7 +9225,8 @@ function crearCuentaJugador(
             promociones:
                 resumen.motivo
                     ? [resumen.motivo]
-                    : []
+                    : [],
+            tiemposManuales: []
         },
         productos: [],
         nota: "",
@@ -9349,6 +9358,10 @@ function mostrarCuentaJugador(id) {
         cuenta.estacionId +
         ")'>➕ 1 hora</button>" +
 
+        "<button onclick='agregarTiempoManual(" +
+        cuenta.estacionId +
+        ")'>🛠️ Tiempo manual</button>" +
+
         "<button onclick='cambiarEstacionCuenta(" +
         cuenta.id +
         ")'>🔄 Cambiar estación</button>" +
@@ -9372,6 +9385,25 @@ function mostrarCuentaJugador(id) {
                           ")'>▶️ Reanudar</button>"
                         : ""
                   )
+        ) +
+
+        "<hr>" +
+        "<h2>🛠️ Tiempo manual</h2>" +
+        (
+            Array.isArray(cuenta.game.tiemposManuales) &&
+            cuenta.game.tiemposManuales.length > 0
+                ? cuenta.game.tiemposManuales.map(function(item) {
+                    return (
+                        "<p style='margin:7px 0;'>" +
+                        "• <strong>" +
+                        escaparHTML(item.concepto || "Tiempo adicional") +
+                        "</strong> · " +
+                        formatearDuracionTarifa(Number(item.minutos) || 0) +
+                        " · $" + Number(item.precio || 0).toFixed(2) +
+                        "</p>"
+                    );
+                }).join("")
+                : "<p style='opacity:.7;'>No hay tiempo manual agregado.</p>"
         ) +
 
         "<hr>" +
@@ -10504,7 +10536,17 @@ function cobrarCuenta(id) {
                         usuarioActualPro
                             ? usuarioActualPro.nombre
                             : "Usuario actual",
-                    cuentaId: cuentaActual.id
+                    cuentaId: cuentaActual.id,
+                    tiemposManuales:
+                        Array.isArray(cuentaActual.game.tiemposManuales)
+                            ? cuentaActual.game.tiemposManuales.map(function(item) {
+                                return {
+                                    minutos: Number(item.minutos) || 0,
+                                    precio: Number(item.precio) || 0,
+                                    concepto: item.concepto || "Tiempo adicional"
+                                };
+                            })
+                            : []
                 };
 
                 historial.push(ventaSesion);
@@ -11683,6 +11725,168 @@ function cambiarEstacionCuenta(cuentaId) {
         "✅ Cuenta movida correctamente.\n\n" +
         "🔄 " + nombreAnterior +
         " → " + nueva.nombre
+    );
+}
+
+// ========================================
+// AGREGAR TIEMPO MANUAL
+// ========================================
+
+function convertirDuracionManualAMinutos(texto) {
+    const limpio = String(texto || "")
+        .trim().toLowerCase()
+        .replace(/,/g, ".")
+        .replace(/\s+/g, " ");
+
+    if (!limpio) return 0;
+
+    const reloj = limpio.match(/^(\d+)\s*:\s*(\d{1,2})$/);
+    if (reloj) {
+        const horas = Number(reloj[1]);
+        const minutos = Number(reloj[2]);
+        if (Number.isInteger(horas) && Number.isInteger(minutos) && minutos >= 0 && minutos < 60) {
+            return horas * 60 + minutos;
+        }
+    }
+
+    const partes = limpio.match(/^(?:(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hora|horas))?\s*(?:(\d+)\s*(?:m|min|mins|minuto|minutos))?$/);
+    if (partes && (partes[1] || partes[2])) {
+        const horas = partes[1] ? Number(partes[1]) : 0;
+        const minutos = partes[2] ? Number(partes[2]) : 0;
+        if (Number.isFinite(horas) && Number.isInteger(minutos) && horas >= 0 && minutos >= 0 && minutos < 60) {
+            return Math.round(horas * 60 + minutos);
+        }
+    }
+
+    const soloMinutos = limpio.match(/^(\d+)\s*(?:m|min|mins|minuto|minutos)?$/);
+    return soloMinutos ? Number(soloMinutos[1]) : 0;
+}
+
+function agregarTiempoManual(id) {
+    if (estadoCaja !== "abierta") {
+        alert(estadoCaja === "pendiente" ? "🔒 Primero debes abrir la caja." : "🔒 La caja de hoy ya está cerrada.");
+        return;
+    }
+
+    const estacion = obtenerEstacionPorId(id);
+    const cuenta = obtenerCuentaPorEstacion(id);
+
+    if (!estacion || !cuenta) {
+        alert("❌ Esta estación no tiene una cuenta abierta.");
+        return;
+    }
+
+    const textoDuracion = prompt(
+        "⏱️ ¿Cuánto tiempo quieres agregar?\n\n" +
+        "Ejemplos:\n" +
+        "• 180 = 180 minutos\n" +
+        "• 3h = 3 horas\n" +
+        "• 3h 30m = 3 horas 30 minutos\n" +
+        "• 3:30 = 3 horas 30 minutos",
+        "3h"
+    );
+    if (textoDuracion === null) return;
+
+    const minutos = convertirDuracionManualAMinutos(textoDuracion);
+    if (!Number.isInteger(minutos) || minutos <= 0 || minutos > 1440) {
+        alert("❌ Duración no válida.\n\nUsa entre 1 y 1440 minutos.");
+        return;
+    }
+
+    const precioTexto = prompt(
+        "💰 ¿Cuánto quieres cobrar por ese tiempo?\n\nEscribe solamente la cantidad.",
+        "0"
+    );
+    if (precioTexto === null) return;
+
+    const precio = Math.round(Number(String(precioTexto).replace(",", ".")) * 100) / 100;
+    if (!Number.isFinite(precio) || precio < 0) {
+        alert("❌ Precio no válido.");
+        return;
+    }
+
+    const conceptoTexto = prompt(
+        "📝 Concepto (opcional):\n\nEjemplo: Promoción 3 horas, descuento especial, cortesía, etc.",
+        "Tiempo adicional"
+    );
+    if (conceptoTexto === null) return;
+    const concepto = conceptoTexto.trim() || "Tiempo adicional";
+
+    const bloqueo = reservaBloqueaNuevaSesion(
+        id,
+        Math.ceil((Number(estacion.segundos) || 0) / 60) + minutos
+    );
+    if (bloqueo) {
+        alert("📅 No se puede agregar ese tiempo porque invade una reserva.\n\n👤 " + bloqueo.cliente + "\n🕐 " + bloqueo.hora);
+        return;
+    }
+
+    if (!confirm(
+        "➕ TIEMPO MANUAL\n\n" +
+        "🎮 " + estacion.nombre + "\n" +
+        "⏱️ " + formatearDuracionTarifa(minutos) + "\n" +
+        "💰 $" + precio.toFixed(2) + "\n" +
+        "📝 " + concepto + "\n\n¿Agregar a la cuenta?"
+    )) return;
+
+    if (estacion.activo && estacion.finalizaEn) {
+        estacion.segundos = Math.max(0, Math.ceil((Number(estacion.finalizaEn) - Date.now()) / 1000));
+    }
+
+    const estabaActiva = estacion.activo === true;
+    const estabaPausada = estacion.pausada === true && !estacion.activo;
+
+    if (!Array.isArray(cuenta.game.tiemposManuales)) {
+        cuenta.game.tiemposManuales = [];
+    }
+
+    cuenta.game.minutos += minutos;
+    cuenta.game.precioOriginal += precio;
+    cuenta.game.precio += precio;
+    cuenta.game.tiemposManuales.push({
+        id: "TM-" + Date.now().toString(36).toUpperCase(),
+        fecha: obtenerFecha(),
+        hora: obtenerHora(),
+        minutos: minutos,
+        precio: precio,
+        concepto: concepto
+    });
+
+    const segundosExtra = minutos * 60;
+    estacion.segundos = Math.max(0, Number(estacion.segundos) || 0) + segundosExtra;
+    estacion.duracionTotalSegundos = Math.max(0, Number(estacion.duracionTotalSegundos) || 0) + segundosExtra;
+    estacion.terminado = false;
+    estacion.avisoMostrado = false;
+    estacion.cliente = cuenta.cliente;
+    estacion.precioSesion = cuenta.game.precio;
+
+    if (estabaActiva) {
+        estacion.activo = true;
+        estacion.pausada = false;
+        estacion.finalizaEn = Date.now() + Number(estacion.segundos) * 1000;
+    } else if (estabaPausada) {
+        estacion.activo = false;
+        estacion.pausada = true;
+        estacion.finalizaEn = null;
+    } else {
+        estacion.activo = true;
+        estacion.pausada = false;
+        estacion.finalizaEn = Date.now() + Number(estacion.segundos) * 1000;
+    }
+
+    if (!estacion.inicioSesion) {
+        estacion.inicioSesion = cuenta.inicioSesion || obtenerHora();
+    }
+
+    guardarDatos();
+    mostrarEstaciones();
+
+    alert(
+        "✅ Tiempo manual agregado.\n\n" +
+        "⏱️ +" + formatearDuracionTarifa(minutos) + "\n" +
+        "💰 +$" + precio.toFixed(2) + "\n" +
+        "📝 " + concepto + "\n\n" +
+        "🧾 Pendiente actual: $" + Number(obtenerTotalCuenta(cuenta)).toFixed(2)
     );
 }
 
@@ -15986,6 +16190,7 @@ function obtenerTicketsPro() {
                     venta.metodoPago ||
                     "",
                 sesion: null,
+                tiemposManuales: [],
                 productos: [],
                 total: 0
             };
@@ -15997,6 +16202,11 @@ function obtenerTicketsPro() {
         if (venta.tipo === "sesion") {
             ticket.sesion =
                 venta;
+
+            ticket.tiemposManuales =
+                Array.isArray(venta.tiemposManuales)
+                    ? venta.tiemposManuales
+                    : [];
 
             ticket.total +=
                 Number(
@@ -16142,6 +16352,16 @@ function crearTicketFolioHTML(ticket) {
                     "</span>" +
                 "</div>";
         }
+
+        (Array.isArray(ticket.tiemposManuales) ? ticket.tiemposManuales : []).forEach(function(item) {
+            lineas +=
+                "<div class='fila'>" +
+                    "<span>🛠️ " +
+                    escaparTextoTicket(item.concepto || "Tiempo adicional") +
+                    " · " + Number(item.minutos || 0) + " min</span>" +
+                    "<span>$" + Number(item.precio || 0).toFixed(2) + "</span>" +
+                "</div>";
+        });
     }
 
     ticket.productos.forEach(
@@ -16683,6 +16903,23 @@ function crearTicketCuentaHTML(cuenta, metodoPago, total, folio, usuario) {
     const descuento =
         Number(cuenta.game && cuenta.game.descuento) || 0;
 
+    const tiemposManuales =
+        Array.isArray(cuenta.game && cuenta.game.tiemposManuales)
+            ? cuenta.game.tiemposManuales
+            : [];
+
+    let tiemposManualesHTML = "";
+
+    tiemposManuales.forEach(function(item) {
+        tiemposManualesHTML +=
+            "<div class='row'>" +
+                "<span>🛠️ " +
+                escaparTextoTicketCuenta(item.concepto || "Tiempo adicional") +
+                " (" + Number(item.minutos || 0) + " min)</span>" +
+                "<span>$" + Number(item.precio || 0).toFixed(2) + "</span>" +
+            "</div>";
+    });
+
     return "<!doctype html>" +
         "<html lang='es'>" +
         "<head>" +
@@ -16752,6 +16989,8 @@ function crearTicketCuentaHTML(cuenta, metodoPago, total, folio, usuario) {
                   "</div>"
                 : ""
         ) +
+
+        tiemposManualesHTML +
 
         productosHTML +
 
@@ -17090,7 +17329,7 @@ function obtenerDatosCompletos() {
     return {
         _meta: {
             producto: "ControlVideojuegos",
-            version: "V29.24",
+            version: "V29.25",
             tipo: "respaldo_completo",
             fechaRespaldo: new Date().toISOString()
         },
