@@ -1,15 +1,23 @@
 // ========================================
-// CONTROL DE VIDEOJUEGOS - VERSION 29.21
+// CONTROL DE VIDEOJUEGOS - VERSION 29.24
 // RESERVAS PRO
 // ========================================
 
 let configuracion = {
+    // Mantiene "precios" por compatibilidad con versiones anteriores.
+    // "tarifas" es la nueva fuente para duración + precio.
     precios: {
         treintaMin: 15,
         unaHora: 30,
         dosHoras: 60,
         tresHoras: 70
     },
+    tarifas: [
+        { id: "T1", minutos: 30, precio: 15 },
+        { id: "T2", minutos: 60, precio: 30 },
+        { id: "T3", minutos: 120, precio: 60 },
+        { id: "T4", minutos: 180, precio: 70 }
+    ],
     avisoMinutos: 10,
     bloqueoInactividadMinutos: 30,
     promociones: {
@@ -124,6 +132,293 @@ let productos = [
 ];
 
 
+
+// ========================================
+// TARIFAS CONFIGURABLES
+// ========================================
+
+function tarifasPredeterminadasPro() {
+    return [
+        { id: "T1", minutos: 30, precio: 15 },
+        { id: "T2", minutos: 60, precio: 30 },
+        { id: "T3", minutos: 120, precio: 60 },
+        { id: "T4", minutos: 180, precio: 70 }
+    ];
+}
+
+function formatearDuracionTarifa(minutos) {
+    const total =
+        Math.max(
+            1,
+            Math.floor(
+                Number(minutos) || 0
+            )
+        );
+
+    const horas =
+        Math.floor(total / 60);
+
+    const resto =
+        total % 60;
+
+    if (horas === 0) {
+        return total + " min";
+    }
+
+    if (resto === 0) {
+        return horas === 1
+            ? "1 hora"
+            : horas + " horas";
+    }
+
+    return horas + " h " + resto + " min";
+}
+
+function normalizarListaTarifasPro(lista) {
+    const entrada =
+        Array.isArray(lista)
+            ? lista
+            : tarifasPredeterminadasPro();
+
+    const salida = [];
+
+    entrada.forEach(function(item, indice) {
+        const minutos =
+            Math.floor(
+                Number(
+                    item &&
+                    item.minutos
+                ) || 0
+            );
+
+        const precio =
+            Number(
+                item &&
+                item.precio
+            );
+
+        if (
+            minutos < 1 ||
+            minutos > 1440 ||
+            !Number.isFinite(precio) ||
+            precio < 0
+        ) {
+            return;
+        }
+
+        if (
+            salida.some(function(existente) {
+                return existente.minutos === minutos;
+            })
+        ) {
+            return;
+        }
+
+        salida.push({
+            id:
+                String(
+                    item.id ||
+                    (
+                        "T" +
+                        (indice + 1)
+                    )
+                ),
+            minutos: minutos,
+            precio:
+                Math.round(
+                    precio * 100
+                ) / 100
+        });
+    });
+
+    if (salida.length === 0) {
+        return tarifasPredeterminadasPro();
+    }
+
+    salida.sort(function(a, b) {
+        return a.minutos - b.minutos;
+    });
+
+    salida.forEach(function(item, indice) {
+        item.id = "T" + (indice + 1);
+    });
+
+    return salida;
+}
+
+function obtenerTarifasConfiguracion() {
+    configuracion.tarifas =
+        normalizarListaTarifasPro(
+            configuracion.tarifas
+        );
+
+    return configuracion.tarifas;
+}
+
+function sincronizarPreciosCompatibilidadPro() {
+    const tarifas =
+        obtenerTarifasConfiguracion();
+
+    const precioPorMinutos =
+        function(minutos, respaldo) {
+            const encontrada =
+                tarifas.find(function(item) {
+                    return Number(item.minutos) ===
+                        Number(minutos);
+                });
+
+            return encontrada
+                ? Number(encontrada.precio) || 0
+                : Number(respaldo) || 0;
+        };
+
+    configuracion.precios = {
+        treintaMin:
+            precioPorMinutos(
+                30,
+                configuracion.precios &&
+                configuracion.precios.treintaMin
+            ),
+        unaHora:
+            precioPorMinutos(
+                60,
+                configuracion.precios &&
+                configuracion.precios.unaHora
+            ),
+        dosHoras:
+            precioPorMinutos(
+                120,
+                configuracion.precios &&
+                configuracion.precios.dosHoras
+            ),
+        tresHoras:
+            precioPorMinutos(
+                180,
+                configuracion.precios &&
+                configuracion.precios.tresHoras
+            )
+    };
+}
+
+function tarifaPorMinutosPro(precios, minutos) {
+    const lista =
+        precios &&
+        Array.isArray(precios.lista)
+            ? precios.lista
+            : obtenerTarifasConfiguracion();
+
+    const exacta =
+        lista.find(function(item) {
+            return Number(item.minutos) ===
+                Number(minutos);
+        });
+
+    if (exacta) {
+        return Number(exacta.precio) || 0;
+    }
+
+    // Si no existe una tarifa exacta, conservamos el
+    // comportamiento anterior: prorratear desde 30 minutos.
+    const base =
+        lista.find(function(item) {
+            return Number(item.minutos) === 30;
+        });
+
+    return (
+        Number(
+            base
+                ? base.precio
+                : 0
+        ) || 0
+    ) *
+    (
+        Number(minutos) / 30
+    );
+}
+
+function listaTarifasEstacionPro(estacion) {
+    const globales =
+        obtenerTarifasConfiguracion();
+
+    if (
+        estacion &&
+        estacion.preciosPersonalizados
+    ) {
+        const personalizados =
+            estacion.preciosPersonalizados;
+
+        if (
+            Array.isArray(
+                personalizados.tarifas
+            )
+        ) {
+            return normalizarListaTarifasPro(
+                personalizados.tarifas
+            );
+        }
+
+        // Migración transparente de las tarifas antiguas
+        // por estación.
+        const preciosViejos = [
+            Number(personalizados.treintaMin),
+            Number(personalizados.unaHora),
+            Number(personalizados.dosHoras),
+            Number(personalizados.tresHoras)
+        ];
+
+        return normalizarListaTarifasPro(
+            globales.map(function(item, indice) {
+                return {
+                    id: item.id,
+                    minutos: item.minutos,
+                    precio:
+                        Number.isFinite(
+                            preciosViejos[indice]
+                        )
+                            ? preciosViejos[indice]
+                            : item.precio
+                };
+            })
+        );
+    }
+
+    return globales.map(function(item) {
+        return {
+            id: item.id,
+            minutos: item.minutos,
+            precio: item.precio
+        };
+    });
+}
+
+function construirPreciosCompatiblesPro(lista) {
+    const normalizada =
+        normalizarListaTarifasPro(
+            lista
+        );
+
+    const precioDe =
+        function(minutos) {
+            const tarifa =
+                normalizada.find(function(item) {
+                    return Number(item.minutos) ===
+                        Number(minutos);
+                });
+
+            return tarifa
+                ? Number(tarifa.precio) || 0
+                : 0;
+        };
+
+    return {
+        lista: normalizada,
+        treintaMin: precioDe(30),
+        unaHora: precioDe(60),
+        dosHoras: precioDe(120),
+        tresHoras: precioDe(180)
+    };
+}
+
 // ========================================
 // ESTACIONES DINAMICAS
 // ========================================
@@ -176,7 +471,9 @@ function normalizarEstaciones() {
         }
 
         if (!estacion.nombre) {
-            estacion.nombre = "Estación " + estacion.id;
+            estacion.nombre =
+                "Estación " +
+                estacion.id;
         }
 
         if (!estacion.tipo) {
@@ -186,21 +483,55 @@ function normalizarEstaciones() {
                     : "Xbox";
         }
 
-        if (typeof estacion.habilitada === "undefined") {
+        if (
+            typeof estacion.habilitada ===
+            "undefined"
+        ) {
             estacion.habilitada = true;
         }
 
-        if (typeof estacion.usarPreciosPersonalizados === "undefined") {
-            estacion.usarPreciosPersonalizados = false;
+        if (
+            typeof estacion.usarPreciosPersonalizados ===
+            "undefined"
+        ) {
+            estacion.usarPreciosPersonalizados =
+                false;
         }
 
-        if (!estacion.preciosPersonalizados) {
+        if (
+            !estacion.preciosPersonalizados
+        ) {
             estacion.preciosPersonalizados = {
-                treintaMin: Number(configuracion.precios.treintaMin) || 0,
-                unaHora: Number(configuracion.precios.unaHora) || 0,
-                dosHoras: Number(configuracion.precios.dosHoras) || 0,
-                tresHoras: Number(configuracion.precios.tresHoras) || 0
+                tarifas:
+                    obtenerTarifasConfiguracion()
+                        .map(function(item) {
+                            return {
+                                id: item.id,
+                                minutos: item.minutos,
+                                precio: item.precio
+                            };
+                        })
             };
+        } else if (
+            !Array.isArray(
+                estacion
+                    .preciosPersonalizados
+                    .tarifas
+            )
+        ) {
+            estacion.preciosPersonalizados = {
+                tarifas:
+                    listaTarifasEstacionPro(
+                        estacion
+                    )
+            };
+        } else {
+            estacion.preciosPersonalizados.tarifas =
+                normalizarListaTarifasPro(
+                    estacion
+                        .preciosPersonalizados
+                        .tarifas
+                );
         }
     });
 
@@ -223,15 +554,21 @@ function normalizarEstaciones() {
                 avisoMostrado: false,
                 usarPreciosPersonalizados: false,
                 preciosPersonalizados: {
-                    treintaMin: Number(configuracion.precios.treintaMin) || 0,
-                    unaHora: Number(configuracion.precios.unaHora) || 0,
-                    dosHoras: Number(configuracion.precios.dosHoras) || 0,
-                    tresHoras: Number(configuracion.precios.tresHoras) || 0
+                    tarifas:
+                        obtenerTarifasConfiguracion()
+                            .map(function(item) {
+                                return {
+                                    id: item.id,
+                                    minutos: item.minutos,
+                                    precio: item.precio
+                                };
+                            })
                 }
             }
         ];
     }
 }
+
 
 function obtenerEstacionPorId(id) {
     return estaciones.find(function(estacion) {
@@ -293,10 +630,15 @@ function crearEstacion() {
         avisoMostrado: false,
         usarPreciosPersonalizados: false,
         preciosPersonalizados: {
-            treintaMin: Number(configuracion.precios.treintaMin) || 0,
-            unaHora: Number(configuracion.precios.unaHora) || 0,
-            dosHoras: Number(configuracion.precios.dosHoras) || 0,
-            tresHoras: Number(configuracion.precios.tresHoras) || 0
+            tarifas:
+                obtenerTarifasConfiguracion()
+                    .map(function(item) {
+                        return {
+                            id: item.id,
+                            minutos: item.minutos,
+                            precio: item.precio
+                        };
+                    })
         }
     });
 
@@ -425,37 +767,16 @@ function cambiarHabilitadaEstacion(id) {
 }
 
 function obtenerPreciosEstacion(estacion) {
-    if (
-        estacion &&
-        estacion.usarPreciosPersonalizados &&
-        estacion.preciosPersonalizados
-    ) {
-        return {
-            treintaMin:
-                Number(estacion.preciosPersonalizados.treintaMin) || 0,
-            unaHora:
-                Number(estacion.preciosPersonalizados.unaHora) || 0,
-            dosHoras:
-                Number(estacion.preciosPersonalizados.dosHoras) || 0,
-            tresHoras:
-                Number(estacion.preciosPersonalizados.tresHoras) || 0
-        };
-    }
-
-    return {
-        treintaMin:
-            Number(configuracion.precios.treintaMin) || 0,
-        unaHora:
-            Number(configuracion.precios.unaHora) || 0,
-        dosHoras:
-            Number(configuracion.precios.dosHoras) || 0,
-        tresHoras:
-            Number(configuracion.precios.tresHoras) || 0
-    };
+    return construirPreciosCompatiblesPro(
+        listaTarifasEstacionPro(
+            estacion
+        )
+    );
 }
 
 function editarPreciosEstacion(id) {
-    const estacion = obtenerEstacionPorId(id);
+    const estacion =
+        obtenerEstacionPorId(id);
 
     if (!estacion) {
         return;
@@ -468,66 +789,85 @@ function editarPreciosEstacion(id) {
         return;
     }
 
-    if (!estacion.preciosPersonalizados) {
-        estacion.preciosPersonalizados = {
-            treintaMin: configuracion.precios.treintaMin,
-            unaHora: configuracion.precios.unaHora,
-            dosHoras: configuracion.precios.dosHoras,
-            tresHoras: configuracion.precios.tresHoras
-        };
+    const globales =
+        obtenerTarifasConfiguracion();
+
+    const actuales =
+        listaTarifasEstacionPro(
+            estacion
+        );
+
+    const tarifasNuevas = [];
+
+    for (
+        let indice = 0;
+        indice < globales.length;
+        indice++
+    ) {
+        const global =
+            globales[indice];
+
+        const actual =
+            actuales.find(function(item) {
+                return Number(item.minutos) ===
+                    Number(global.minutos);
+            });
+
+        const precio =
+            Number(
+                prompt(
+                    formatearDuracionTarifa(
+                        global.minutos
+                    ) +
+                    " - precio:",
+                    actual
+                        ? actual.precio
+                        : global.precio
+                )
+            );
+
+        if (
+            !Number.isFinite(precio) ||
+            precio < 0
+        ) {
+            alert(
+                "❌ Una o más tarifas no son válidas."
+            );
+            return;
+        }
+
+        tarifasNuevas.push({
+            id: global.id,
+            minutos: global.minutos,
+            precio: precio
+        });
     }
 
-    const modo = confirm(
-        "💰 TARIFA DE " + estacion.nombre + "\n\n" +
-        (
-            estacion.usarPreciosPersonalizados
-                ? "Actualmente usa precios personalizados."
-                : "Actualmente usa los precios generales."
-        ) +
-        "\n\n" +
-        "Aceptar = usar precios personalizados\n" +
-        "Cancelar = usar precios generales"
-    );
+    const modo =
+        confirm(
+            "💰 TARIFA DE " +
+            estacion.nombre +
+            "\n\n" +
+            "Aceptar = usar estas tarifas personalizadas.\n" +
+            "Cancelar = usar las tarifas generales."
+        );
 
     if (!modo) {
-        estacion.usarPreciosPersonalizados = false;
+        estacion.usarPreciosPersonalizados =
+            false;
         guardarDatos();
         mostrarAdministrarEstaciones();
         return;
     }
 
-    const actuales = estacion.preciosPersonalizados;
-
-    const precio30 = Number(
-        prompt("30 minutos - precio:", actuales.treintaMin)
-    );
-    const precio60 = Number(
-        prompt("1 hora - precio:", actuales.unaHora)
-    );
-    const precio120 = Number(
-        prompt("2 horas - precio:", actuales.dosHoras)
-    );
-    const precio180 = Number(
-        prompt("3 horas - precio:", actuales.tresHoras)
-    );
-
-    if (
-        !isFinite(precio30) || precio30 < 0 ||
-        !isFinite(precio60) || precio60 < 0 ||
-        !isFinite(precio120) || precio120 < 0 ||
-        !isFinite(precio180) || precio180 < 0
-    ) {
-        alert("❌ Una o más tarifas no son válidas.");
-        return;
-    }
-
-    estacion.usarPreciosPersonalizados = true;
+    estacion.usarPreciosPersonalizados =
+        true;
 
     estacion.preciosPersonalizados = {
-        treintaMin: precio30,
-        unaHora: precio60,
-        dosHoras: precio120,
-        tresHoras: precio180
+        tarifas:
+            normalizarListaTarifasPro(
+                tarifasNuevas
+            )
     };
 
     guardarDatos();
@@ -535,9 +875,11 @@ function editarPreciosEstacion(id) {
 
     alert(
         "✅ Tarifas guardadas para " +
-        estacion.nombre + "."
+        estacion.nombre +
+        "."
     );
 }
+
 
 function mostrarAdministrarEstaciones() {
     if (!exigirPermisoPro("configuracion")) {
@@ -807,6 +1149,54 @@ function cargarDatos() {
             tresHoras: 70
         };
     }
+
+    if (
+        !Array.isArray(
+            configuracion.tarifas
+        )
+    ) {
+        configuracion.tarifas = [
+            {
+                id: "T1",
+                minutos: 30,
+                precio:
+                    Number(
+                        configuracion.precios.treintaMin
+                    ) || 0
+            },
+            {
+                id: "T2",
+                minutos: 60,
+                precio:
+                    Number(
+                        configuracion.precios.unaHora
+                    ) || 0
+            },
+            {
+                id: "T3",
+                minutos: 120,
+                precio:
+                    Number(
+                        configuracion.precios.dosHoras
+                    ) || 0
+            },
+            {
+                id: "T4",
+                minutos: 180,
+                precio:
+                    Number(
+                        configuracion.precios.tresHoras
+                    ) || 0
+            }
+        ];
+    }
+
+    configuracion.tarifas =
+        normalizarListaTarifasPro(
+            configuracion.tarifas
+        );
+
+    sincronizarPreciosCompatibilidadPro();
 
     if (
         typeof configuracion.avisoMinutos === "undefined" ||
@@ -2182,31 +2572,11 @@ function iniciarReserva(id) {
     const precios =
         obtenerPreciosEstacion(estacion);
 
-    let precioBase;
-
-    switch (Number(reserva.duracion)) {
-        case 30:
-            precioBase = precios.treintaMin;
-            break;
-        case 60:
-            precioBase = precios.unaHora;
-            break;
-        case 120:
-            precioBase = precios.dosHoras;
-            break;
-        case 180:
-            precioBase = precios.tresHoras;
-            break;
-        default:
-            precioBase =
-                (
-                    Number(precios.treintaMin) || 0
-                ) *
-                (
-                    Number(reserva.duracion) / 30
-                );
-            break;
-    }
+    const precioBase =
+        tarifaPorMinutosPro(
+            precios,
+            Number(reserva.duracion)
+        );
 
     // Si la reserva tiene un precio acordado mayor que cero,
     // respetamos ese precio en lugar de ignorarlo.
@@ -2578,30 +2948,50 @@ function crearReserva() {
 
     const estacionId = Number(estacion.id);
 
+    const tarifasReserva =
+        obtenerTarifasConfiguracion();
+
+    const opcionesTarifaReserva =
+        tarifasReserva
+            .map(function(item, indice) {
+                return (
+                    (indice + 1) +
+                    " = " +
+                    formatearDuracionTarifa(
+                        item.minutos
+                    ) +
+                    " · $" +
+                    Number(item.precio).toFixed(2)
+                );
+            })
+            .join("\n");
+
     const duracionTexto = prompt(
-        "⏱️ Duración de la reserva en minutos:\n\n" +
-        "30 / 60 / 120 / 180",
-        "60"
+        "⏱️ Duración de la reserva:\n\n" +
+        opcionesTarifaReserva +
+        "\n\nEscribe el número de la tarifa:",
+        "2"
     );
 
     if (duracionTexto === null) {
         return;
     }
 
-    const duracion =
-        Number(duracionTexto);
+    const indiceTarifa =
+        Number(duracionTexto) - 1;
 
-    if (
-        ![30, 60, 120, 180].includes(
-            duracion
-        )
-    ) {
+    const tarifaSeleccionada =
+        tarifasReserva[indiceTarifa];
+
+    if (!tarifaSeleccionada) {
         alert(
-            "❌ Duración no válida.\n\n" +
-            "Usa 30, 60, 120 o 180 minutos."
+            "❌ Tarifa no válida."
         );
         return;
     }
+
+    const duracion =
+        Number(tarifaSeleccionada.minutos);
 
     if (
         hayConflictoReserva(
@@ -2621,16 +3011,11 @@ function crearReserva() {
     const precios =
         obtenerPreciosEstacion(estacion);
 
-    let precioReserva =
-        precios.unaHora;
-
-    if (duracion === 30) {
-        precioReserva = precios.treintaMin;
-    } else if (duracion === 120) {
-        precioReserva = precios.dosHoras;
-    } else if (duracion === 180) {
-        precioReserva = precios.tresHoras;
-    }
+    const precioReserva =
+        tarifaPorMinutosPro(
+            precios,
+            duracion
+        );
 
     const resumenPrecio =
         calcularPrecioPromocional(
@@ -4590,33 +4975,36 @@ function mostrarEstaciones() {
 
             "<div class='v27-time-options'>" +
 
-            "<button class='v27-action-primary' onclick='venderTiempo(" +
-            estacion.id + ",30," +
-            preciosEstacion.treintaMin +
-            ")'>30 min · $" +
-            preciosEstacion.treintaMin +
-            "</button>" +
-
-            "<button class='v27-action-primary' onclick='venderTiempo(" +
-            estacion.id + ",60," +
-            preciosEstacion.unaHora +
-            ")'>1 hora · $" +
-            preciosEstacion.unaHora +
-            "</button>" +
-
-            "<button class='v27-action-primary' onclick='venderTiempo(" +
-            estacion.id + ",120," +
-            preciosEstacion.dosHoras +
-            ")'>2 horas · $" +
-            preciosEstacion.dosHoras +
-            "</button>" +
-
-            "<button class='v27-action-primary v27-action-featured' onclick='venderTiempo(" +
-            estacion.id + ",180," +
-            preciosEstacion.tresHoras +
-            ")'>⭐ 3 horas · $" +
-            preciosEstacion.tresHoras +
-            "</button>" +
+            preciosEstacion.lista.map(function(tarifa, indice) {
+                return (
+                    "<button class='v27-action-primary " +
+                    (
+                        indice ===
+                        preciosEstacion.lista.length - 1
+                            ? "v27-action-featured"
+                            : ""
+                    ) +
+                    "' onclick='venderTiempo(" +
+                    estacion.id +
+                    "," +
+                    Number(tarifa.minutos) +
+                    "," +
+                    Number(tarifa.precio) +
+                    ")'>" +
+                    (
+                        indice ===
+                        preciosEstacion.lista.length - 1
+                            ? "⭐ "
+                            : ""
+                    ) +
+                    formatearDuracionTarifa(
+                        tarifa.minutos
+                    ) +
+                    " · $" +
+                    Number(tarifa.precio).toFixed(2) +
+                    "</button>"
+                );
+            }).join("") +
 
             "</div>" +
 
@@ -4637,13 +5025,37 @@ function mostrarEstaciones() {
 
             "<div class='v27-control-options'>" +
 
-            "<button onclick='agregarTiempoMinutos(" +
-            estacion.id + ",30," +
-            preciosEstacion.treintaMin +
-            ")'>+ 30 min</button>" +
+            (
+                preciosEstacion.lista.length > 0
+                    ? "<button onclick='agregarTiempoMinutos(" +
+                      estacion.id +
+                      "," +
+                      Number(preciosEstacion.lista[0].minutos) +
+                      "," +
+                      Number(preciosEstacion.lista[0].precio) +
+                      ")'>+ " +
+                      formatearDuracionTarifa(
+                          preciosEstacion.lista[0].minutos
+                      ) +
+                      "</button>"
+                    : ""
+            ) +
 
-            "<button onclick='agregarTiempo(" +
-            estacion.id + ")'>+ 1 hora</button>" +
+            (
+                preciosEstacion.lista.length > 1
+                    ? "<button onclick='agregarTiempoMinutos(" +
+                      estacion.id +
+                      "," +
+                      Number(preciosEstacion.lista[1].minutos) +
+                      "," +
+                      Number(preciosEstacion.lista[1].precio) +
+                      ")'>+ " +
+                      formatearDuracionTarifa(
+                          preciosEstacion.lista[1].minutos
+                      ) +
+                      "</button>"
+                    : ""
+            ) +
 
             (
                 cuentaEstacion
@@ -5519,33 +5931,11 @@ function crearReservaPro() {
             estacion
         );
 
-    let precioSugerido;
-
-    switch (duracion) {
-        case 30:
-            precioSugerido =
-                Number(precios.treintaMin) || 0;
-            break;
-        case 60:
-            precioSugerido =
-                Number(precios.unaHora) || 0;
-            break;
-        case 120:
-            precioSugerido =
-                Number(precios.dosHoras) || 0;
-            break;
-        case 180:
-            precioSugerido =
-                Number(precios.tresHoras) || 0;
-            break;
-        default:
-            precioSugerido =
-                (
-                    Number(precios.treintaMin) || 0
-                ) *
-                (duracion / 30);
-            break;
-    }
+    const precioSugerido =
+        tarifaPorMinutosPro(
+            precios,
+            duracion
+        );
 
     const precioTexto =
         prompt(
@@ -11339,27 +11729,11 @@ function agregarTiempoMinutos(
         !Number.isFinite(precioExtra) ||
         precioExtra < 0
     ) {
-        if (minutosNumero === 30) {
-            precioExtra =
-                Number(precios.treintaMin) || 0;
-        } else if (minutosNumero === 60) {
-            precioExtra =
-                Number(precios.unaHora) || 0;
-        } else if (minutosNumero === 120) {
-            precioExtra =
-                Number(precios.dosHoras) || 0;
-        } else if (minutosNumero === 180) {
-            precioExtra =
-                Number(precios.tresHoras) || 0;
-        } else {
-            precioExtra =
-                (
-                    Number(precios.treintaMin) || 0
-                ) *
-                (
-                    minutosNumero / 30
-                );
-        }
+        precioExtra =
+            tarifaPorMinutosPro(
+                precios,
+                minutosNumero
+            );
     }
 
     let cuenta =
@@ -11588,13 +11962,24 @@ function agregarTiempo(id) {
             estacion
         );
 
+    const tarifa =
+        precios.lista.length > 1
+            ? precios.lista[1]
+            : precios.lista[0];
+
+    if (!tarifa) {
+        alert(
+            "❌ No hay tarifas configuradas."
+        );
+        return;
+    }
+
     agregarTiempoMinutos(
         id,
-        60,
-        precios.unaHora
+        Number(tarifa.minutos),
+        Number(tarifa.precio)
     );
 }
-
 
 
 // ========================================
@@ -16705,7 +17090,7 @@ function obtenerDatosCompletos() {
     return {
         _meta: {
             producto: "ControlVideojuegos",
-            version: "V29.18",
+            version: "V29.24",
             tipo: "respaldo_completo",
             fechaRespaldo: new Date().toISOString()
         },
@@ -16805,6 +17190,32 @@ function validarRespaldoPro(datos) {
     }
 
     if (
+        datos._meta &&
+        datos._meta.producto &&
+        datos._meta.producto !==
+            "ControlVideojuegos"
+    ) {
+        return {
+            valido: false,
+            mensaje:
+                "El archivo no pertenece a ControlVideojuegos."
+        };
+    }
+
+    if (
+        datos._meta &&
+        datos._meta.tipo &&
+        datos._meta.tipo !==
+            "respaldo_completo"
+    ) {
+        return {
+            valido: false,
+            mensaje:
+                "El archivo no es un respaldo completo."
+        };
+    }
+
+    if (
         !Array.isArray(
             datos.estaciones
         )
@@ -16863,6 +17274,89 @@ function obtenerResumenRespaldoPro(datos) {
                 ? datos.usuariosPro.length
                 : 0
     };
+}
+
+function crearRespaldoAutomaticoDiarioPro() {
+    try {
+        const hoy =
+            obtenerFecha();
+
+        const historial =
+            obtenerHistorialRespaldosPro();
+
+        const yaExiste =
+            historial.some(
+                function(item) {
+                    return (
+                        item &&
+                        item.motivo ===
+                            "Copia automática diaria" &&
+                        item.fecha === hoy
+                    );
+                }
+            );
+
+        if (yaExiste) {
+            return false;
+        }
+
+        const datos =
+            obtenerDatosCompletos();
+
+        const entrada = {
+            id:
+                "AUTO-" +
+                Date.now()
+                    .toString(36)
+                    .toUpperCase(),
+
+            creadoEn:
+                new Date().toISOString(),
+
+            fecha:
+                hoy,
+
+            hora:
+                obtenerHora(),
+
+            usuario:
+                "Sistema",
+
+            motivo:
+                "Copia automática diaria",
+
+            resumen:
+                obtenerResumenRespaldoPro(
+                    datos
+                ),
+
+            datos:
+                datos
+        };
+
+        const nuevas =
+            [
+                entrada
+            ].concat(historial);
+
+        // Máximo de 8 copias internas para no llenar
+        // el almacenamiento local del iPad.
+        const limitado =
+            nuevas.slice(
+                0,
+                8
+            );
+
+        return guardarHistorialRespaldosPro(
+            limitado
+        );
+    } catch (error) {
+        console.warn(
+            "No se pudo crear la copia automática diaria:",
+            error
+        );
+        return false;
+    }
 }
 
 function crearRespaldoInternoPro(
@@ -16951,6 +17445,88 @@ function crearRespaldoInternoPro(
     guardarDatos();
 
     return true;
+}
+
+async function compartirRespaldoPro() {
+    if (
+        !exigirPermisoPro(
+            "configuracion"
+        )
+    ) {
+        return;
+    }
+
+    const datos =
+        obtenerDatosCompletos();
+
+    const nombre =
+        "ControlVideojuegos_Respaldo_" +
+        obtenerFecha() +
+        "_" +
+        obtenerHora()
+            .replace(/:/g, "") +
+        ".json";
+
+    const contenido =
+        JSON.stringify(
+            datos,
+            null,
+            2
+        );
+
+    const archivo =
+        new File(
+            [contenido],
+            nombre,
+            {
+                type:
+                    "application/json"
+            }
+        );
+
+    try {
+        if (
+            navigator.share &&
+            navigator.canShare &&
+            navigator.canShare({
+                files: [
+                    archivo
+                ]
+            })
+        ) {
+            await navigator.share({
+                title:
+                    "Respaldo de ControlVideojuegos",
+                text:
+                    "Copia completa de los datos de ControlVideojuegos.",
+                files: [
+                    archivo
+                ]
+            });
+
+            registrarActividadPro(
+                "Respaldo compartido",
+                "Copia completa enviada mediante la hoja de compartir.",
+                "seguridad"
+            );
+
+            guardarDatos();
+
+            return;
+        }
+    } catch (error) {
+        if (
+            error &&
+            error.name ===
+                "AbortError"
+        ) {
+            return;
+        }
+    }
+
+    // En navegadores que no soporten compartir archivos,
+    // se usa la descarga normal como respaldo.
+    descargarRespaldoPro();
 }
 
 function descargarRespaldoPro() {
@@ -17897,7 +18473,8 @@ function mostrarRespaldo() {
             "</div>" +
 
             "<div class='v281-backup-actions'>" +
-                "<button class='v27-action-primary' onclick='descargarRespaldoPro()'>⬇️ Descargar respaldo</button>" +
+                "<button class='v27-action-primary' onclick='compartirRespaldoPro()'>📱 Guardar en Archivos / Compartir</button>" +
+                "<button onclick='descargarRespaldoPro()'>⬇️ Descargar respaldo</button>" +
                 "<button onclick='crearRespaldoInternoPro(\"Copia manual\")'>💾 Crear copia interna</button>" +
                 "<button onclick='importarRespaldo()'>📥 Importar respaldo</button>" +
             "</div>" +
@@ -18001,7 +18578,9 @@ function mostrarRespaldo() {
             "</div>" +
 
             "<div class='v281-backup-footer'>" +
-                "💡 Recomendación: descarga periódicamente el respaldo completo y guárdalo fuera del dispositivo." +
+                "💡 En iPad usa <strong>Guardar en Archivos / Compartir</strong> para conservar una copia fuera de la aplicación." +
+                "<br><br>" +
+                "🛡️ El sistema crea automáticamente una copia interna diaria al abrirse." +
             "</div>" +
 
             "<div class='v27-page-actions'>" +
@@ -18028,10 +18607,65 @@ function mostrarConfiguracion() {
 
     contenedor.innerHTML = "";
 
-    const div = document.createElement("div");
+    const div =
+        document.createElement("div");
 
     const habilitadas =
         obtenerEstacionesDisponibles().length;
+
+    const tarifas =
+        obtenerTarifasConfiguracion();
+
+    let tarifasHtml =
+        tarifas.map(function(tarifa, indice) {
+            return (
+                "<div style='" +
+                    "display:grid;" +
+                    "grid-template-columns:1fr 1fr auto;" +
+                    "gap:10px;" +
+                    "align-items:end;" +
+                    "margin:10px 0;" +
+                    "padding:14px;" +
+                    "border-radius:14px;" +
+                    "background:rgba(255,255,255,.05);" +
+                "'>" +
+
+                "<label>" +
+                    "⏱️ Tiempo" +
+                    "<input id='tarifaMin_" +
+                    indice +
+                    "' type='number' min='1' max='1440' step='1' value='" +
+                    Number(tarifa.minutos) +
+                    "' style='width:100%;'>" +
+                "</label>" +
+
+                "<label>" +
+                    "💰 Precio" +
+                    "<input id='tarifaPrecio_" +
+                    indice +
+                    "' type='number' min='0' step='0.01' value='" +
+                    Number(tarifa.precio).toFixed(2) +
+                    "' style='width:100%;'>" +
+                "</label>" +
+
+                (
+                    tarifas.length > 1
+                        ? "<button onclick='eliminarTarifaConfiguracion(" +
+                          indice +
+                          ")'>🗑️</button>"
+                        : "<span></span>"
+                ) +
+
+                "<small style='grid-column:1/-1;opacity:.7;'>" +
+                    "Se mostrará como " +
+                    formatearDuracionTarifa(
+                        tarifa.minutos
+                    ) +
+                "</small>" +
+
+                "</div>"
+            );
+        }).join("");
 
     div.innerHTML =
         "<h1>⚙️ Configuración</h1>" +
@@ -18049,33 +18683,33 @@ function mostrarConfiguracion() {
         "</button>" +
 
         "<p style='opacity:.75;'>" +
-        "Aquí puedes agregar Xbox 4, Xbox 5, PC 1, PC 2 " +
-        "o cualquier otra estación que necesites." +
+        "Aquí puedes agregar Xbox, PC u otros equipos." +
         "</p>" +
 
         "<hr>" +
 
-        "<h2>💰 Precios</h2>" +
+        "<h2>💰 Tarifas de juego</h2>" +
+        "<p style='opacity:.8;'>" +
+        "Ahora puedes cambiar tanto el tiempo como el precio. " +
+        "Las estaciones que usan tarifa general tomarán estos valores automáticamente." +
+        "</p>" +
 
-        "<p><label>30 minutos: $</label>" +
-        "<input id='precio30' type='number' min='0' value='" +
-        configuracion.precios.treintaMin +
-        "'></p>" +
+        "<div id='listaTarifasConfiguracion'>" +
+            tarifasHtml +
+        "</div>" +
 
-        "<p><label>1 hora: $</label>" +
-        "<input id='precio60' type='number' min='0' value='" +
-        configuracion.precios.unaHora +
-        "'></p>" +
+        (
+            tarifas.length < 8
+                ? "<button onclick='agregarTarifaConfiguracion()'>" +
+                  "➕ Agregar tarifa" +
+                  "</button>"
+                : "<p style='opacity:.7;'>Máximo de 8 tarifas.</p>"
+        ) +
 
-        "<p><label>2 horas: $</label>" +
-        "<input id='precio120' type='number' min='0' value='" +
-        configuracion.precios.dosHoras +
-        "'></p>" +
-
-        "<p><label>3 horas: $</label>" +
-        "<input id='precio180' type='number' min='0' value='" +
-        configuracion.precios.tresHoras +
-        "'></p>" +
+        "<p style='opacity:.7;font-size:13px;'>" +
+        "Puedes usar desde 1 minuto hasta 24 horas. " +
+        "No se permiten dos tarifas con el mismo tiempo." +
+        "</p>" +
 
         "<hr>" +
 
@@ -18101,8 +18735,7 @@ function mostrarConfiguracion() {
         "'></p>" +
 
         "<p style='opacity:.75;'>" +
-        "El descuento se aplica automáticamente al cliente " +
-        "cuando alcanza el número de sesiones configurado." +
+        "El descuento se aplica automáticamente al cliente cuando alcanza el número de sesiones configurado." +
         "</p>" +
 
         "<br>" +
@@ -18118,21 +18751,160 @@ function mostrarConfiguracion() {
     contenedor.appendChild(div);
 }
 
+function agregarTarifaConfiguracion() {
+    const tarifas =
+        obtenerTarifasConfiguracion();
+
+    if (tarifas.length >= 8) {
+        alert("⚠️ Ya tienes el máximo de 8 tarifas.");
+        return;
+    }
+
+    const ultima =
+        tarifas[tarifas.length - 1];
+
+    const siguienteMinutos =
+        ultima
+            ? Math.min(
+                1440,
+                Number(ultima.minutos) + 30
+            )
+            : 30;
+
+    const siguientePrecio =
+        ultima
+            ? Number(ultima.precio) || 0
+            : 0;
+
+    tarifas.push({
+        id:
+            "T" +
+            (tarifas.length + 1),
+        minutos:
+            siguienteMinutos,
+        precio:
+            siguientePrecio
+    });
+
+    tarifas.sort(function(a, b) {
+        return a.minutos - b.minutos;
+    });
+
+    mostrarConfiguracion();
+}
+
+function eliminarTarifaConfiguracion(indice) {
+    const tarifas =
+        obtenerTarifasConfiguracion();
+
+    if (tarifas.length <= 1) {
+        alert(
+            "⚠️ Debe quedar al menos una tarifa."
+        );
+        return;
+    }
+
+    const tarifa =
+        tarifas[indice];
+
+    if (!tarifa) {
+        return;
+    }
+
+    if (
+        !confirm(
+            "¿Eliminar la tarifa de " +
+            formatearDuracionTarifa(
+                tarifa.minutos
+            ) +
+            "?"
+        )
+    ) {
+        return;
+    }
+
+    tarifas.splice(indice, 1);
+
+    configuracion.tarifas =
+        normalizarListaTarifasPro(
+            tarifas
+        );
+
+    mostrarConfiguracion();
+}
+
 function guardarConfiguracion() {
-    const precio30 =
-        Number(document.getElementById("precio30").value);
+    const tarifas =
+        obtenerTarifasConfiguracion();
 
-    const precio60 =
-        Number(document.getElementById("precio60").value);
+    const tarifasNuevas = [];
 
-    const precio120 =
-        Number(document.getElementById("precio120").value);
+    for (
+        let indice = 0;
+        indice < tarifas.length;
+        indice++
+    ) {
+        const minutos =
+            Math.floor(
+                Number(
+                    document.getElementById(
+                        "tarifaMin_" +
+                        indice
+                    ).value
+                )
+            );
 
-    const precio180 =
-        Number(document.getElementById("precio180").value);
+        const precio =
+            Number(
+                document.getElementById(
+                    "tarifaPrecio_" +
+                    indice
+                ).value
+            );
+
+        if (
+            !Number.isInteger(minutos) ||
+            minutos < 1 ||
+            minutos > 1440 ||
+            !Number.isFinite(precio) ||
+            precio < 0
+        ) {
+            alert(
+                "❌ Revisa las tarifas. " +
+                "El tiempo debe estar entre 1 y 1440 minutos y el precio no puede ser negativo."
+            );
+            return;
+        }
+
+        if (
+            tarifasNuevas.some(function(item) {
+                return item.minutos === minutos;
+            })
+        ) {
+            alert(
+                "❌ No puede haber dos tarifas con el mismo tiempo."
+            );
+            return;
+        }
+
+        tarifasNuevas.push({
+            id:
+                "T" +
+                (indice + 1),
+            minutos: minutos,
+            precio:
+                Math.round(
+                    precio * 100
+                ) / 100
+        });
+    }
 
     const avisoMinutos =
-        Number(document.getElementById("avisoMinutos").value);
+        Number(
+            document.getElementById(
+                "avisoMinutos"
+            ).value
+        );
 
     const descuentoFrecuente =
         Number(
@@ -18149,38 +18921,39 @@ function guardarConfiguracion() {
         );
 
     if (
-        isNaN(precio30) ||
-        isNaN(precio60) ||
-        isNaN(precio120) ||
-        isNaN(precio180) ||
-        precio30 < 0 ||
-        precio60 < 0 ||
-        precio120 < 0 ||
-        precio180 < 0 ||
-        isNaN(avisoMinutos) ||
+        !Number.isInteger(avisoMinutos) ||
         avisoMinutos < 1 ||
         avisoMinutos > 60 ||
-        isNaN(descuentoFrecuente) ||
+        !Number.isFinite(
+            descuentoFrecuente
+        ) ||
         descuentoFrecuente < 0 ||
         descuentoFrecuente > 100 ||
-        isNaN(sesionesDescuento) ||
+        !Number.isInteger(
+            sesionesDescuento
+        ) ||
         sesionesDescuento < 1 ||
         sesionesDescuento > 100
     ) {
         alert(
-            "Revisa precios, aviso y promoción."
+            "❌ Revisa aviso y promoción."
         );
         return;
     }
 
-    configuracion.precios = {
-        treintaMin: precio30,
-        unaHora: precio60,
-        dosHoras: precio120,
-        tresHoras: precio180
-    };
+    tarifasNuevas.sort(function(a, b) {
+        return a.minutos - b.minutos;
+    });
 
-    configuracion.avisoMinutos = avisoMinutos;
+    configuracion.tarifas =
+        normalizarListaTarifasPro(
+            tarifasNuevas
+        );
+
+    sincronizarPreciosCompatibilidadPro();
+
+    configuracion.avisoMinutos =
+        avisoMinutos;
 
     configuracion.promociones = {
         descuentoClienteFrecuente:
@@ -18191,7 +18964,9 @@ function guardarConfiguracion() {
 
     guardarDatos();
 
-    alert("✅ Configuración guardada.");
+    alert(
+        "✅ Tarifas y configuración guardadas."
+    );
 
     volverInicio();
 }
@@ -26034,6 +26809,7 @@ inicializarReservasPro();
 normalizarFoliosTicketsPro();
 inicializarUsuariosPro();
 asegurarEstadisticasDia();
+crearRespaldoAutomaticoDiarioPro();
 
 if (!fechaCaja) {
     fechaCaja = obtenerFecha();
