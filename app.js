@@ -16396,7 +16396,7 @@ function crearTicketFolioHTML(ticket) {
     return (
         "<!doctype html>" +
         "<html lang='es'>" +
-        "<head>" +
+        "<head>" + "<script>" + "function volverAlSistemaDesdeTicket(){try{var origen=document.referrer;if(window.opener && !window.opener.closed){window.opener.focus();window.close();setTimeout(function(){if(!window.closed){window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}},250);}else{window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}}catch(e){window.location.href='https://israelpl21.github.io/control-viodeojuegos/';}}" + "</script>" +
             "<meta charset='utf-8'>" +
             "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
             "<title>Ticket " +
@@ -16520,6 +16520,10 @@ function crearTicketFolioHTML(ticket) {
             "<div class='print'>" +
                 "<button onclick='window.print()'>" +
                     "🖨️ Imprimir" +
+                "</button>" +
+                "<button onclick='volverAlSistemaDesdeTicket()' " +
+                    "style='margin-left:8px;padding:12px 16px;font-size:16px;'>" +
+                    "↩️ Volver" +
                 "</button>" +
             "</div>" +
 
@@ -16922,7 +16926,7 @@ function crearTicketCuentaHTML(cuenta, metodoPago, total, folio, usuario) {
 
     return "<!doctype html>" +
         "<html lang='es'>" +
-        "<head>" +
+        "<head>" + "<script>" + "function volverAlSistemaDesdeTicket(){try{var origen=document.referrer;if(window.opener && !window.opener.closed){window.opener.focus();window.close();setTimeout(function(){if(!window.closed){window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}},250);}else{window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}}catch(e){window.location.href='https://israelpl21.github.io/control-viodeojuegos/';}}" + "</script>" +
         "<meta charset='utf-8'>" +
         "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
         "<title>Ticket de cuenta</title>" +
@@ -17028,6 +17032,8 @@ function crearTicketCuentaHTML(cuenta, metodoPago, total, folio, usuario) {
             "<button onclick='window.print()' " +
             "style='padding:12px 20px;font-size:16px;'>" +
             "🖨️ Imprimir</button>" +
+        "<button onclick='volverAlSistemaDesdeTicket()' style='margin-left:8px;padding:12px 16px;font-size:16px;'>↩️ Volver</button>" +
+        "<button onclick='volverAlSistemaDesdeTicket()' style='margin-left:8px;padding:12px 16px;font-size:16px;'>↩️ Volver</button>" +
         "</div>" +
 
         "</body></html>";
@@ -17122,7 +17128,7 @@ function imprimirTicketProducto(venta) {
 
     ventana.document.write(
         "<!doctype html>" +
-        "<html><head><meta charset='utf-8'>" +
+        "<html><head><meta charset='utf-8'>" + "<script>" + "function volverAlSistemaDesdeTicket(){try{var origen=document.referrer;if(window.opener && !window.opener.closed){window.opener.focus();window.close();setTimeout(function(){if(!window.closed){window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}},250);}else{window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}}catch(e){window.location.href='https://israelpl21.github.io/control-viodeojuegos/';}}" + "</script>" +
         "<title>Ticket de producto</title>" +
         "<style>" +
         "body{font-family:Arial,sans-serif;width:300px;margin:25px auto;color:#111;}" +
@@ -17190,6 +17196,7 @@ function imprimirTicketProducto(venta) {
 
         "<div class='centro' style='margin-top:18px;'>" +
         "<button onclick='window.print()'>🖨️ Imprimir</button>" +
+        "<button onclick='volverAlSistemaDesdeTicket()' style='margin-left:8px;padding:12px 16px;font-size:16px;'>↩️ Volver</button>" +
         "</div>" +
 
         "</body></html>"
@@ -17208,7 +17215,7 @@ function crearTicketHTML(venta) {
 
     return (
         "<!doctype html>" +
-        "<html><head><meta charset='utf-8'>" +
+        "<html><head><meta charset='utf-8'>" + "<script>" + "function volverAlSistemaDesdeTicket(){try{var origen=document.referrer;if(window.opener && !window.opener.closed){window.opener.focus();window.close();setTimeout(function(){if(!window.closed){window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}},250);}else{window.location.href=origen||'https://israelpl21.github.io/control-viodeojuegos/';}}catch(e){window.location.href='https://israelpl21.github.io/control-viodeojuegos/';}}" + "</script>" +
         "<title>Ticket - " +
         escaparTextoTicket(venta.xbox) +
         "</title>" +
@@ -17288,6 +17295,7 @@ function crearTicketHTML(venta) {
 
         "<div class='centro' style='margin-top:18px;'>" +
         "<button onclick='window.print()'>🖨️ Imprimir</button>" +
+        "<button onclick='volverAlSistemaDesdeTicket()' style='margin-left:8px;padding:12px 16px;font-size:16px;'>↩️ Volver</button>" +
         "</div>" +
 
         "</body></html>"
@@ -17329,7 +17337,7 @@ function obtenerDatosCompletos() {
     return {
         _meta: {
             producto: "ControlVideojuegos",
-            version: "V29.25",
+            version: "V29.26",
             tipo: "respaldo_completo",
             fechaRespaldo: new Date().toISOString()
         },
