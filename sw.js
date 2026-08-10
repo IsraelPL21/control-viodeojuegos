@@ -1,4 +1,4 @@
-const CACHE = "controlvideojuegos-v29-26";
+const CACHE = "controlvideojuegos-v29-27";
 
 const ASSETS = [
   "./",
