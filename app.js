@@ -17337,7 +17337,7 @@ function obtenerDatosCompletos() {
     return {
         _meta: {
             producto: "ControlVideojuegos",
-            version: "V29.26",
+            version: "V29.27",
             tipo: "respaldo_completo",
             fechaRespaldo: new Date().toISOString()
         },
@@ -27004,38 +27004,66 @@ button.v285-alert-card {
 }
 
 /* ========================================
-   V29.12 — TODOS LOS ACCESOS EN EL MISMO FLUJO
+   V29.27 — MENÚ PRINCIPAL SIMÉTRICO Y RESPONSIVO
 ======================================== */
 
-/* Panel PRO es el primer botón de la misma fila/flujo.
-   No existe una barra separada. */
+/* Cuadrícula fija para que los accesos tengan el mismo ancho/alto y las
+   filas queden perfectamente alineadas en iPad y PC. */
 .v299-home-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 7px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
     width: 100%;
-    margin: 0 0 12px;
+    margin: 0 0 16px;
+    align-items: stretch;
 }
 
-/* Todos, incluido Panel PRO, usan exactamente la misma clase. */
 .v299-home-actions .v291-panel-button {
-    flex: 0 0 auto;
-    align-self: center;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 62px;
     margin: 0 !important;
-    padding: 9px 13px !important;
-    line-height: 1.2 !important;
+    padding: 10px 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    line-height: 1.15 !important;
     font-weight: 900 !important;
-    box-shadow: 0 7px 20px rgba(124,92,255,.12);
+    white-space: normal !important;
+    border-radius: 14px !important;
+    box-sizing: border-box !important;
+    box-shadow: 0 8px 22px rgba(124,92,255,.14);
+    transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+}
+
+.v299-home-actions .v291-panel-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(124,92,255,.22);
+    filter: brightness(1.06);
+}
+
+.v299-home-actions .v291-panel-button:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 900px) {
+    .v299-home-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 9px;
+    }
 }
 
 @media (max-width: 650px) {
     .v299-home-actions {
-        gap: 6px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
     }
 
     .v299-home-actions .v291-panel-button {
-        padding: 9px 12px !important;
+        min-height: 58px;
+        padding: 9px 6px !important;
+        font-size: 11px !important;
     }
 }
 
