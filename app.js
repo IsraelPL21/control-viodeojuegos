@@ -659,14 +659,6 @@ function editarEstacion(id) {
         return;
     }
 
-    if (estacion.activo) {
-        alert(
-            "⚠️ No puedes editar una estación mientras está jugando.\n\n" +
-            "Detén la sesión primero."
-        );
-        return;
-    }
-
     const nombre = prompt(
         "Nombre de la estación:",
         estacion.nombre
@@ -709,9 +701,18 @@ function editarEstacion(id) {
         return;
     }
 
+    if (estacion.activo && tipo !== estacion.tipo) {
+        alert("⚠️ Durante una sesión solo puedes cambiar el nombre, no el tipo de estación.");
+        return;
+    }
     estacion.nombre = nombre.trim();
     estacion.tipo = tipo;
-
+    cuentasJugadores.forEach(function(cuenta) {
+        if (Number(cuenta.estacionId) === Number(id) && cuenta.estado === "abierta") {
+            cuenta.estacion = estacion.nombre;
+            cuenta.tipoEstacion = estacion.tipo;
+        }
+    });
     guardarDatos();
     mostrarAdministrarEstaciones();
 }
@@ -1084,17 +1085,34 @@ function guardarDatos() {
         fecha: obtenerFecha()
     };
 
-    localStorage.setItem(
-        "controlVideojuegosV6",
-        JSON.stringify(datos)
-    );
+    const serializado = JSON.stringify(datos);
+    // Escribir primero una copia de recuperación. Si la escritura falla,
+    // no sobrescribimos el último estado correcto.
+    try {
+        const anterior = localStorage.getItem("controlVideojuegosV6");
+        if (anterior && anterior !== serializado) {
+            try {
+                localStorage.setItem("controlVideojuegosV6_respaldo", anterior);
+            } catch (errorRespaldo) {
+                // La falta de espacio para la copia no debe bloquear el guardado principal.
+                console.warn("No se pudo escribir la copia adicional:", errorRespaldo);
+            }
+        }
+        localStorage.setItem("controlVideojuegosV6", serializado);
+    } catch (error) {
+        console.error("No se pudo guardar el sistema:", error);
+        if (!window.__alertaAlmacenamientoPro) {
+            window.__alertaAlmacenamientoPro = true;
+            alert("⚠️ El navegador no pudo guardar los cambios. Libera espacio y descarga un respaldo antes de cerrar la aplicación.");
+        }
+    }
 }
 
 function cargarDatos() {
     let guardado = localStorage.getItem("controlVideojuegosV6");
-
     if (!guardado) {
-        guardado = localStorage.getItem("controlVideojuegos");
+        guardado = localStorage.getItem("controlVideojuegosV6_respaldo") ||
+            localStorage.getItem("controlVideojuegos");
     }
 
     if (!guardado) {
@@ -1124,7 +1142,19 @@ function cargarDatos() {
             );
         }
 
-        return;
+        // Intentar recuperar automáticamente la última copia válida.
+        const copia = localStorage.getItem("controlVideojuegosV6_respaldo");
+        if (copia && copia !== guardado) {
+            try {
+                datos = JSON.parse(copia);
+                alert("⚠️ Se recuperó una copia anterior de los datos. Revisa las cuentas y descarga un respaldo.");
+            } catch (errorCopia) {
+                console.error("Respaldo inválido:", errorCopia);
+                return;
+            }
+        } else {
+            return;
+        }
     }
 
     if (Array.isArray(datos.usuariosPro)) {
@@ -5103,13 +5133,19 @@ function mostrarEstaciones() {
                                       : ""
                                 )
                       )
-                    : ""
+                    : "<button onclick='iniciarTiempoManualNuevo(" +
+                      estacion.id +
+                      ")'>🛠️ Tiempo manual</button>" +
+                      "<button onclick='editarEstacion(" +
+                      estacion.id +
+                      ")'>✏️ Nombre</button>"
             ) +
 
             "</div>" +
 
             "<div class='v27-secondary-options'>" +
 
+            "<button onclick='editarEstacion(" + estacion.id + ")'>✏️ Editar nombre</button>" +
             "<button class='v27-start-button' onclick='iniciar(" +
             estacion.id + ")'>▶️ Iniciar</button>" +
 
@@ -10465,11 +10501,10 @@ function cobrarCuenta(id) {
                         cuentaActual.estacionId
                     );
 
-                const recibido =
-                    Number(
-                        datosPago &&
-                        datosPago.recibido
-                    ) || totalActual;
+                const recibido = datosPago && datosPago.recibido !== undefined &&
+                    datosPago.recibido !== null && datosPago.recibido !== ""
+                    ? Number(datosPago.recibido)
+                    : totalActual;
 
                 const cambio =
                     Math.max(
@@ -11762,6 +11797,40 @@ function convertirDuracionManualAMinutos(texto) {
     return soloMinutos ? Number(soloMinutos[1]) : 0;
 }
 
+function iniciarTiempoManualNuevo(id) {
+    if (estadoCaja !== "abierta") {
+        alert("🔒 Abre la caja para iniciar una sesión.");
+        return;
+    }
+    const estacion = obtenerEstacionPorId(id);
+    if (!estacion || estacion.habilitada === false) return;
+    if (obtenerCuentaPorEstacion(id) || estacion.activo ||
+        estacion.pausada || Number(estacion.segundos) > 0) {
+        alert("⚠️ Hay tiempo o una cuenta pendiente. Revísala antes de crear otro cargo.");
+        return;
+    }
+    const duracion = prompt("⏱️ Duración manual (ej. 90, 1h 30m):", "60");
+    if (duracion === null) return;
+    const minutos = convertirDuracionManualAMinutos(duracion);
+    if (!Number.isInteger(minutos) || minutos < 1 || minutos > 1440) {
+        alert("❌ La duración debe ser de 1 a 1440 minutos.");
+        return;
+    }
+    const textoPrecio = prompt("💰 Precio TOTAL a cobrar por esos minutos:", "0");
+    if (textoPrecio === null) return;
+    const precio = Number(String(textoPrecio).replace(",", "."));
+    if (!Number.isFinite(precio) || precio < 0 || precio > 1000000) {
+        alert("❌ Precio inválido.");
+        return;
+    }
+    const bloqueo = reservaBloqueaNuevaSesion(id, minutos);
+    if (bloqueo) {
+        alert("📅 No se puede iniciar: hay una reserva que se cruza.");
+        return;
+    }
+    abrirCuentaDesdeSesion(estacion, minutos, Math.round(precio * 100) / 100);
+}
+
 function agregarTiempoManual(id) {
     if (estadoCaja !== "abierta") {
         alert(estadoCaja === "pendiente" ? "🔒 Primero debes abrir la caja." : "🔒 La caja de hoy ya está cerrada.");
@@ -11842,7 +11911,7 @@ function agregarTiempoManual(id) {
 
     cuenta.game.minutos += minutos;
     cuenta.game.precioOriginal += precio;
-    cuenta.game.precio += precio;
+    cuenta.game.precio = Math.round(((Number(cuenta.game.precio) || 0) + precio) * 100) / 100;
     cuenta.game.tiemposManuales.push({
         id: "TM-" + Date.now().toString(36).toUpperCase(),
         fecha: obtenerFecha(),
@@ -11911,8 +11980,8 @@ function agregarTiempoMinutos(
     const minutosNumero =
         Math.floor(Number(minutos) || 0);
 
-    if (minutosNumero <= 0) {
-        alert("❌ El tiempo agregado no es válido.");
+    if (!Number.isInteger(Number(minutos)) || minutosNumero <= 0 || minutosNumero > 1440) {
+        alert("❌ Introduce entre 1 y 1440 minutos.");
         return;
     }
 
@@ -11940,6 +12009,11 @@ function agregarTiempoMinutos(
             );
     }
 
+    if (!Number.isFinite(precioExtra) || precioExtra < 0) {
+        alert("❌ Precio inválido. No se agregó tiempo ni se generó un cobro.");
+        return;
+    }
+
     let cuenta =
         obtenerCuentaPorEstacion(id);
 
@@ -11958,7 +12032,11 @@ function agregarTiempoMinutos(
             cuenta.game.precio
         ) > 0;
 
-    if (cuentaPagada || cuentaHuérfana) {
+    if (cuentaHuérfana && !cuentaPagada) {
+        alert("⚠️ Se detectó una cuenta sin cliente asociado a la estación. No se borrará ni se duplicará el cobro. Revísala desde Cuentas abiertas.");
+        return;
+    }
+    if (cuentaPagada) {
         cuentasJugadores =
             cuentasJugadores.filter(
                 function(item) {
@@ -12025,6 +12103,17 @@ function agregarTiempoMinutos(
             cuenta.cliente
         );
 
+    if (!confirm(
+        "CONFIRMAR TIEMPO ADICIONAL\n\n" +
+        "🎮 " + estacion.nombre + "\n" +
+        "⏱️ +" + minutosNumero + " minutos\n" +
+        "💰 Cargo adicional: $" + Number(resumen.precioFinal).toFixed(2) + "\n" +
+        "🧾 Nuevo pendiente: $" + (obtenerTotalCuenta(cuenta) + Number(resumen.precioFinal)).toFixed(2) +
+        "\n\n¿Confirmas el cargo?"
+    )) {
+        return;
+    }
+
     const estabaActiva =
         estacion.activo === true;
 
@@ -12062,8 +12151,10 @@ function agregarTiempoMinutos(
     cuenta.game.descuento +=
         Number(resumen.descuento) || 0;
 
-    cuenta.game.precio +=
-        Number(resumen.precioFinal) || 0;
+    cuenta.game.precio = Math.round((
+        (Number(cuenta.game.precio) || 0) +
+        (Number(resumen.precioFinal) || 0)
+    ) * 100) / 100;
 
     if (
         resumen.motivo &&
@@ -19600,10 +19691,11 @@ function nuevoDia() {
         return;
     }
 
-    if (cuentasJugadores.length > 0) {
-        alert(
-            "⚠️ Primero debes cobrar o cancelar todas las cuentas abiertas."
-        );
+    if (cuentasJugadores.length > 0 || estaciones.some(function(e) {
+        return e.activo || e.pausada || Number(e.segundos) > 0 ||
+            e.finalizaEn || e.cliente;
+    })) {
+        alert("⚠️ Hay cuentas o estaciones con sesiones pendientes. No se borrarán al iniciar otra jornada; revísalas primero.");
         return;
     }
 
@@ -20692,7 +20784,11 @@ function verificarCambioDeDia() {
     // Si hay una sesión activa a medianoche,
     // esperamos a que termine/detenga antes de
     // preparar la nueva jornada.
-    if (xboxJugando) {
+    if (xboxJugando || estaciones.some(function(estacion) {
+        return estacion.pausada || Number(estacion.segundos) > 0 ||
+            estacion.terminado || estacion.cliente ||
+            estacion.finalizaEn;
+    })) {
         return;
     }
 
@@ -27191,5 +27287,11 @@ window.addEventListener(
     }
 );
 
+document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "visible") {
+        actualizarTiempos();
+        if (vistaActual === "inicio" && sesionUsuarioIniciadaPro) mostrarEstaciones();
+    }
+});
 actualizarTiempos();
 mostrarLoginPro();
