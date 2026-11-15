@@ -1032,6 +1032,8 @@ function sincronizarTemporizadoresPersistidos() {
                 Number(estacion.finalizaEn) - ahora;
 
             if (restante <= 0) {
+                // Preservar la hora exacta de vencimiento aunque Safari suspenda la app.
+                estacion.ultimoFinProgramadoV31 = Number(estacion.finalizaEn);
                 estacion.segundos = 0;
                 estacion.activo = false;
                 estacion.finalizaEn = null;
@@ -1604,7 +1606,16 @@ function cargarDatos() {
         });
     }
 
-    if (datos.fecha === obtenerFecha()) {
+    // No cortar una jornada al recargar si sigue habiendo tiempo o cobros pendientes.
+    // El corte automático ocurrirá al terminar las sesiones y cerrar las cuentas.
+    const haySesionesPendientesAlCargar = cuentasJugadores.some(function(c) {
+        return c && c.estado === "abierta";
+    }) || estaciones.some(function(e) {
+        return e && (e.activo || e.pausada || e.terminado ||
+            Number(e.segundos) > 0 || e.finalizaEn || e.cliente);
+    });
+
+    if (datos.fecha === obtenerFecha() || haySesionesPendientesAlCargar) {
         ventasDelDia = datos.ventasDelDia || 0;
         sesionesDelDia = datos.sesionesDelDia || 0;
         historial = datos.historial || [];
@@ -1618,7 +1629,7 @@ function cargarDatos() {
             estadoCaja = cajaCerrada ? "cerrada" : "abierta";
         }
 
-        fechaCaja = datos.fecha;
+        fechaCaja = datos.fechaCaja || datos.fecha;
 
         ventasPorMetodo = datos.ventasPorMetodo || {
             efectivo: 0,
@@ -1817,6 +1828,8 @@ function actualizarTiempos() {
             const restante = estacion.finalizaEn - ahora;
 
             if (restante <= 0) {
+                // Preservar la hora exacta de vencimiento aunque Safari suspenda la app.
+                estacion.ultimoFinProgramadoV31 = Number(estacion.finalizaEn);
                 estacion.segundos = 0;
                 estacion.activo = false;
                 estacion.finalizaEn = null;
@@ -9214,10 +9227,7 @@ function obtenerTotalCuenta(cuenta) {
             )
             : 0;
 
-    return Math.max(
-        0,
-        subtotal - anticipo
-    );
+    return Math.round(Math.max(0, subtotal - anticipo) * 100) / 100;
 }
 
 
@@ -11797,6 +11807,16 @@ function convertirDuracionManualAMinutos(texto) {
     return soloMinutos ? Number(soloMinutos[1]) : 0;
 }
 
+// Sugerencia editable: evita que el precio predeterminado sea $0 por accidente.
+function sugerirPrecioManualPro(estacion, minutos) {
+    const precios = obtenerPreciosEstacion(estacion);
+    const lista = precios && Array.isArray(precios.lista) ? precios.lista : [];
+    const exacta = lista.find(t => Number(t.minutos) === Number(minutos));
+    const base = exacta || lista.find(t => Number(t.minutos) > 0 && Number(t.precio) >= 0);
+    if (!base) return 0;
+    return Math.round((exacta ? Number(exacta.precio) : Number(base.precio) * minutos / Number(base.minutos)) * 100) / 100;
+}
+
 function iniciarTiempoManualNuevo(id) {
     if (estadoCaja !== "abierta") {
         alert("🔒 Abre la caja para iniciar una sesión.");
@@ -11816,7 +11836,7 @@ function iniciarTiempoManualNuevo(id) {
         alert("❌ La duración debe ser de 1 a 1440 minutos.");
         return;
     }
-    const textoPrecio = prompt("💰 Precio TOTAL a cobrar por esos minutos:", "0");
+    const textoPrecio = prompt("💰 Precio TOTAL a cobrar (puedes editar la sugerencia):", String(sugerirPrecioManualPro(estacion, minutos)));
     if (textoPrecio === null) return;
     const precio = Number(String(textoPrecio).replace(",", "."));
     if (!Number.isFinite(precio) || precio < 0 || precio > 1000000) {
@@ -11864,7 +11884,7 @@ function agregarTiempoManual(id) {
 
     const precioTexto = prompt(
         "💰 ¿Cuánto quieres cobrar por ese tiempo?\n\nEscribe solamente la cantidad.",
-        "0"
+        String(sugerirPrecioManualPro(estacion, minutos))
     );
     if (precioTexto === null) return;
 
