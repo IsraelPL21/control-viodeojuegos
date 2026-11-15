@@ -168,7 +168,7 @@
     panel.id = 'panelBitacoraV31';
     panel.style.cssText = 'margin:12px 0;padding:13px;border:1px solid #64748b;border-radius:12px;background:#182536;color:white';
     const pendientes = avisos.filter(a => !a.atendido);
-    panel.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><button onclick="mostrarBitacoraV31()">📒 Historial de sesiones</button><button onclick="activarAlarmaV31()">🔔 Activar / probar alarma</button><span style="font-size:12px">Registros: '+registros.length+' · '+(audioListo?'Alarma lista':'Toca activar alarma después de abrir la app')+'</span></div>';
+    panel.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><button onclick="mostrarBitacoraV31()">📒 Historial de sesiones</button><button onclick="activarAlarmaV31()">🔔 Activar / probar alarma</button><span style="font-size:12px">Versión 31.1 · Registros: '+registros.length+' · '+(audioListo?'Alarma lista':'Toca activar alarma después de abrir la app')+'</span></div>';
     pendientes.slice(-4).forEach(a => {
       const linea = document.createElement('div');
       linea.style.cssText='background:#7f1d1d;color:#fff;padding:10px;margin-top:8px;border-radius:9px';
