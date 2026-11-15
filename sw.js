@@ -1,6 +1,6 @@
-const CACHE = "controlvideojuegos-v31-historial-alarma-1";
+const CACHE = "controlvideojuegos-v31-historial-alarma-2";
 const ASSETS = [
-  "./", "./index.html", "./app.js", "./mejoras-v31.js", "./manifest.webmanifest",
+  "./", "./index.html", "./app.js", "./mejoras-v31.js?v=31.1", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-180.png"
 ];
 self.addEventListener("install", event => {
