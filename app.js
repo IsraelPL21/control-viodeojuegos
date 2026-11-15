@@ -1032,6 +1032,8 @@ function sincronizarTemporizadoresPersistidos() {
                 Number(estacion.finalizaEn) - ahora;
 
             if (restante <= 0) {
+                // Preservar la hora exacta de vencimiento aunque Safari suspenda la app.
+                estacion.ultimoFinProgramadoV31 = Number(estacion.finalizaEn);
                 estacion.segundos = 0;
                 estacion.activo = false;
                 estacion.finalizaEn = null;
@@ -1826,6 +1828,8 @@ function actualizarTiempos() {
             const restante = estacion.finalizaEn - ahora;
 
             if (restante <= 0) {
+                // Preservar la hora exacta de vencimiento aunque Safari suspenda la app.
+                estacion.ultimoFinProgramadoV31 = Number(estacion.finalizaEn);
                 estacion.segundos = 0;
                 estacion.activo = false;
                 estacion.finalizaEn = null;
