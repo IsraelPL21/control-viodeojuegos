@@ -1604,7 +1604,16 @@ function cargarDatos() {
         });
     }
 
-    if (datos.fecha === obtenerFecha()) {
+    // No cortar una jornada al recargar si sigue habiendo tiempo o cobros pendientes.
+    // El corte automático ocurrirá al terminar las sesiones y cerrar las cuentas.
+    const haySesionesPendientesAlCargar = cuentasJugadores.some(function(c) {
+        return c && c.estado === "abierta";
+    }) || estaciones.some(function(e) {
+        return e && (e.activo || e.pausada || e.terminado ||
+            Number(e.segundos) > 0 || e.finalizaEn || e.cliente);
+    });
+
+    if (datos.fecha === obtenerFecha() || haySesionesPendientesAlCargar) {
         ventasDelDia = datos.ventasDelDia || 0;
         sesionesDelDia = datos.sesionesDelDia || 0;
         historial = datos.historial || [];
@@ -1618,7 +1627,7 @@ function cargarDatos() {
             estadoCaja = cajaCerrada ? "cerrada" : "abierta";
         }
 
-        fechaCaja = datos.fecha;
+        fechaCaja = datos.fechaCaja || datos.fecha;
 
         ventasPorMetodo = datos.ventasPorMetodo || {
             efectivo: 0,
