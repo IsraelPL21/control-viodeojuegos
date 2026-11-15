@@ -9223,10 +9223,7 @@ function obtenerTotalCuenta(cuenta) {
             )
             : 0;
 
-    return Math.max(
-        0,
-        subtotal - anticipo
-    );
+    return Math.round(Math.max(0, subtotal - anticipo) * 100) / 100;
 }
 
 
@@ -11806,6 +11803,16 @@ function convertirDuracionManualAMinutos(texto) {
     return soloMinutos ? Number(soloMinutos[1]) : 0;
 }
 
+// Sugerencia editable: evita que el precio predeterminado sea $0 por accidente.
+function sugerirPrecioManualPro(estacion, minutos) {
+    const precios = obtenerPreciosEstacion(estacion);
+    const lista = precios && Array.isArray(precios.lista) ? precios.lista : [];
+    const exacta = lista.find(t => Number(t.minutos) === Number(minutos));
+    const base = exacta || lista.find(t => Number(t.minutos) > 0 && Number(t.precio) >= 0);
+    if (!base) return 0;
+    return Math.round((exacta ? Number(exacta.precio) : Number(base.precio) * minutos / Number(base.minutos)) * 100) / 100;
+}
+
 function iniciarTiempoManualNuevo(id) {
     if (estadoCaja !== "abierta") {
         alert("🔒 Abre la caja para iniciar una sesión.");
@@ -11825,7 +11832,7 @@ function iniciarTiempoManualNuevo(id) {
         alert("❌ La duración debe ser de 1 a 1440 minutos.");
         return;
     }
-    const textoPrecio = prompt("💰 Precio TOTAL a cobrar por esos minutos:", "0");
+    const textoPrecio = prompt("💰 Precio TOTAL a cobrar (puedes editar la sugerencia):", String(sugerirPrecioManualPro(estacion, minutos)));
     if (textoPrecio === null) return;
     const precio = Number(String(textoPrecio).replace(",", "."));
     if (!Number.isFinite(precio) || precio < 0 || precio > 1000000) {
@@ -11873,7 +11880,7 @@ function agregarTiempoManual(id) {
 
     const precioTexto = prompt(
         "💰 ¿Cuánto quieres cobrar por ese tiempo?\n\nEscribe solamente la cantidad.",
-        "0"
+        String(sugerirPrecioManualPro(estacion, minutos))
     );
     if (precioTexto === null) return;
 
